@@ -1,0 +1,678 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WebVulkan Compute Specification</title>
+  <link rel="stylesheet" type="text/css" href="Khronos-WD.css">
+  <script src="jquery-1.3.2.min.js" type="text/javascript"></script>
+  <script src="generateTOC.js" type="text/javascript"></script>
+  <script src="preprocessHTML.js" type="text/javascript"></script>
+</head>
+
+<body>
+
+    <!--begin-logo-->
+    <!--end-logo-->
+
+    <h1>WebVulkan Compute Specification</h1>
+    <h2 class="no-toc">초안 작성중, 23 June 2016</h2>
+    <dl>
+      <dt>This version:
+      <dt>Editors:</dt>
+      <dd>
+        <a href="mailto:claude.c.jeong@selvas.com">Claude C. Jeong</a>
+        (<a href="http://www.selvasai.com/">SELVASAI</a>)
+      </dd>
+      <dd>
+        <a href="mailto:rand.d.kim@selvas.com">Rand D. Kim</a>
+        (<a href="http://www.selvasai.com/">SELVASAI</a>)
+      </dd>
+      <dd>
+        <a href="mailto:fidelis.j.park@selvas.com">Fidelis J. Park</a>
+        (<a href="http://www.selvasai.com/">SELVASAI</a>)
+      </dd>
+    </dl>
+
+    <hr>
+
+    <h2 class="no-toc">Abstract</h2>
+    <p>      
+      이 문서는 WebVulkan Compute 에 대한 규격을 정의합니다.
+    </p>
+
+    <h2 class="no-toc">Status of this document</h2>
+
+    <!--begin-status-->
+    <p>
+      이 문서는 초안 작성 중입니다.
+    </p>
+    <!--end-status-->
+
+    <h2 class="no-toc">Contents</h2>
+    <div id="toc"><ul class="toc">
+    </ul></div>
+
+    <h2>Introduction</h2>
+
+    <p>
+      크로노스에서 공개된 Vulkan 공개 표준을 활용하여, 웹 브라우저에서 Vulkan API를 사용한 고속 연산을 지원하기 위한 규격을 정의합니다.
+    </p>
+
+    <h2>Conventions</h2>
+
+    <h3>Basic types</h3>
+
+    <p>WebVulkan Compute API에서는 다음의 자료형을 표준 자료형으로 가지게 됩니다</p>
+
+<pre class="idl">
+typedef boolean             VKCBoolean;  // return true or false
+typedef long                VKCint;      // 32-bit signed integer
+typedef unsigned long       VKCuint;     // 32-bit unsigned integer
+typedef unsigned long       VKCenum;     // Used for enumerated types, such as WebVKC.VK_PHYSICAL_DEVICE_TYPE_OTHER
+typedef long                VKCResult;   // Used for result code return, such as WebVKC.VK_SUCCESS
+</pre>
+
+    <p>
+      <!-- WebVulkan Compute API에서는 다음의 자료형을 표준 자료형으로 가지게 됩니다 -->
+    </p>
+
+    <h3><a id="WEBCLEXCEPTION">Exceptions</a></h3>
+
+    <p>
+      WebVulkan Compute는 Native Vulkan의 에러코드를 리턴하는 대신 다음의 예외를 발생시키게 됩니다.
+    </p>
+
+<pre class="idl">
+exception <dfn>WebVKCException</dfn> : DOMException {
+  DOMString name;              // 열거형 상수(enum)으로 정의된 에러코드의 이름을 나타냅니다, e.g. "VK_ERROR_DEVICE_LOST"
+  DOMString? message;          // 예외 발생 원인에 대한 메세지입니다.
+};
+</pre>
+
+    <p>
+      name, message는 발생하는 모든 WebVKCException에서 표현되지만 message의 데이터는 빈 값(null)일 수 있습니다
+    </p>
+
+    <h3><a id="RELEASE">Resource management</a></h3>
+
+    <p>
+      동적으로 생성된 WebVulkan Compute객체는 사용 후 release 함수를 호출하여야 합니다. release가 호출된 객체는 delete 또는 Garbage Collect를 통해 할당되었던 자원을 해재합니다.
+    </p>
+
+    <p>
+      WebVKC 객체는 'releaseAll' 함수를 가지고 있습니다.
+      WebVKC의 'releaseAll'은 해당 WebVKC객체를 통해 생성된 모든 자원을 release 해 줍니다.
+    </p>
+
+<pre class="example">
+  var vkc = window.webvkc;
+  vkc.initialize();
+  var device = vkc.createDevice();
+  var buffer = device.createBuffer(1024);
+  vkc.releaseAll();
+</pre>
+
+    <h3><a id="CONCURRENCY">Concurrency</a></h3>
+
+    <p>
+      WebVulkan Computing은 Javascript와 동시에 수행될 수 있습니다. WebVulkan Computing을 통해 연산 명령을 전달하고 해당 결과를 WebVKCBuffer에서 Javascript ArrayBuffer로 복사하고자 할 경우, 아직 WebVulkan의 작업이 끝나기 전일 수 있습니다. 데이터 동기화를 위해 WebVKCCommandQueue에 기록된 작업이 종료되기 전에 WebVKCBuffer의 읽기/쓰기를 피해야 합니다.
+    </p>
+
+    <h2>Interfaces</h2>
+
+    <h3><a id="WEBVKC">WebVKC</a></h3>
+
+    <p>
+      WebVulkan Compute API는 singleton 객체인 webvkc를 통해 이용할 수 있습니다. webvkc는 Javascript에서 window namespace를 통해 접근가능합니다.
+    </p>
+
+<pre class="idl">
+partial interface Window {
+  readonly attribute WebVKC webvkc;
+};
+</pre>
+
+<pre class="idl">
+interface <dfn>WebVKC</dfn> {
+  void initialize();
+  VKCBoolean isInitialized();
+  VKCuint getPhysicalDeviceCount();
+  sequence&lt;WebVKCDevice&gt; getDevices();
+  WebVKCDevice createDevice(optional VKCuint physicalDeviceIndex);
+  void releaseAll();
+
+  /* VKCResult Code */
+  const VKCResult VK_SUCCESS = 0;
+  const VKCResult VK_NOT_READY = 1;
+  const VKCResult VK_TIMEOUT = 2;
+  const VKCResult VK_EVENT_SET = 3;
+  const VKCResult VK_EVENT_RESET = 4;
+  const VKCResult VK_INCOMPLETE = 5;
+  const VKCResult VK_ERROR_OUT_OF_HOST_MEMORY = -1;
+  const VKCResult VK_ERROR_OUT_OF_DEVICE_MEMORY = -2;
+  const VKCResult VK_ERROR_INITIALIZATION_FAILED = -3;
+  const VKCResult VK_ERROR_DEVICE_LOST = -4;
+  const VKCResult VK_ERROR_MEMORY_MAP_FAILED = -5;
+  const VKCResult VK_ERROR_LAYER_NOT_PRESENT = -6;
+  const VKCResult VK_ERROR_EXTENSION_NOT_PRESENT = -7;
+  const VKCResult VK_ERROR_FEATURE_NOT_PRESENT = -8;
+  const VKCResult VK_ERROR_INCOMPATIBLE_DRIVER = -9;
+  const VKCResult VK_ERROR_TOO_MANY_OBJECTS = -10;
+  const VKCResult VK_ERROR_FORMAT_NOT_SUPPORTED = -11;
+  const VKCResult VK_ERROR_SURFACE_LOST_KHR = -1000000000;
+  const VKCResult VK_ERROR_NATIVE_WINDOW_IN_USE_KHR = -1000000001;
+  const VKCResult VK_SUBOPTIMAL_KHR = 1000001003;
+  const VKCResult VK_ERROR_OUT_OF_DATE_KHR = -1000001004;
+  const VKCResult VK_ERROR_INCOMPATIBLE_DISPLAY_KHR = -1000003001;
+  const VKCResult VK_ERROR_VALIDATION_FAILED_EXT = -1000011001;
+  const VKCResult VK_RESULT_BEGIN_RANGE = -11;
+  const VKCResult VK_RESULT_END_RANGE = 5;
+  const VKCResult VK_RESULT_RANGE_SIZE = 17;
+  const VKCResult VK_RESULT_MAX_ENUM = 0x7FFFFFFF;
+  const VKCResult VKC_RESULT_SEND_IPC_MESSAGE_FAILURE = -9999;
+  const VKCResult VKC_FAILURE = 16000001;
+  const VKCResult VKC_ARGUMENT_NOT_VALID = 16000002;
+  const VKCResult VKC_GET_SHADER_CODE_FAIL = 16000003;
+  const VKCResult VKC_ALREADY_BEGIN_COMMAND_QUEUE = 16000004;
+  const VKCResult VKC_COMMAND_QUEUE_NOT_BEGINING = 16000005;
+  const VKCResult VKC_ERROR_NOT_SETARG_BUFFER_INDEX = 16000006;
+
+  /* VKPhysicalDeviceType */
+  const VKCint VK_PHYSICAL_DEVICE_TYPE_OTHER = 0;
+  const VKCint VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU = 1;
+  const VKCint VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU = 2;
+  const VKCint VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU = 3;
+  const VKCint VK_PHYSICAL_DEVICE_TYPE_CPU = 4;
+  const VKCint VK_PHYSICAL_DEVICE_TYPE_BEGIN_RANGE = VK_PHYSICAL_DEVICE_TYPE_OTHER;
+  const VKCint VK_PHYSICAL_DEVICE_TYPE_END_RANGE = VK_PHYSICAL_DEVICE_TYPE_CPU;
+  const VKCint VK_PHYSICAL_DEVICE_TYPE_RANGE_SIZE = (VK_PHYSICAL_DEVICE_TYPE_CPU - VK_PHYSICAL_DEVICE_TYPE_OTHER + 1);
+  const VKCint VK_PHYSICAL_DEVICE_TYPE_MAX_ENUM = 0x7FFFFFFF;
+
+  /* WebVKDevice getInfo name */
+  const long VKC_apiVersion = 0;
+  const long VKC_driverVersion = 1;
+  const long VKC_vendorID = 2;
+  const long VKC_deviceID = 3;
+  const long VKC_deviceType = 4;
+  const long VKC_deviceName = 5;
+  const long VKC_maxMemoryAllocationCount = 6;
+  const long VKC_maxComputeWorkGroupCount = 7;
+  const long VKC_maxComputeWorkGroupInvocations = 8;
+  const long VKC_maxComputeWorkGroupSize = 9;
+};
+</pre>
+
+    <dl class="methods">
+
+      <dt class="idl-code">void initialize()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        <p>
+          WebVKC 객체를 초기화합니다.
+        </p>
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VK_ERROR_OUT_OF_HOST_MEMORY` -- host memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_INITIALIZATION_FAILED` -- 객체 초기화에 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_LAYER_NOT_PRESENT` -- 요청된 layer를 지원하지 않거나 load하지 못했을 때 발생하는 예외</li>
+          <li>`VK_ERROR_EXTENSION_NOT_PRESENT` -- 요청된 extension을 지원하지 않을 때 발생하는 예외</li>
+          <li>`VK_ERROR_INCOMPATIBLE_DRIVER` -- 요청한 버전의 vulkan을 driver나 다른 이유로 지원하지 않을 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">VKCBoolean isInitialized()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        <p>
+          WebVKC 객체가 초기화 되어있는지 확인합니다.
+        </p>
+      </dd>
+
+      <dt class="idl-code">VKCuint getPhysicalDeviceCount()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        <p>
+          해당 기기의 Physical Device의 수를 반환합니다.
+        </p>
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VK_NOT_READY` -- WebVKC 객체가 initialize 되지 않았을 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">sequence&lt;WebVKCDevice&gt; getDevices()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        <p>
+          생성한 모든 WebVKCDevice 객체 배열을 반환합니다.
+        </p>
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VK_NOT_READY` -- WebVKC 객체가 initialize 되지 않았을 때 발생하는 예외</li>
+        </ul>
+
+      </dd>
+
+      <dt class="idl-code">WebVKCDevice createDevice(optional VKCuint physicalDeviceIndex)
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        선택된 physicalDevice를 이용하여 새로운 WebVKCDevice 객체를 반환합니다.
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VKC_ARGUMENT_NOT_VALID` -- 옵션으로 입력한 physicalDeviceIndex가 실제 physicalDevice의 크기보다 클 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_HOST_MEMORY` -- host memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_INITIALIZATION_FAILED` -- 객체 초기화에 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_EXTENSION_NOT_PRESENT` -- 요청된 extension을 지원하지 않을 때 발생하는 예외</li>
+          <li>`VK_ERROR_FEATURE_NOT_PRESENT` -- 해당 기능을 지원하지 않을 때 발생하는 예외</li>
+          <li>`VK_ERROR_TOO_MANY_OBJECTS` -- 같은 type의 객체가 이미 많이 생성되어 더 이상 생성할 수 없을 때 발생하는 예외/li>
+          <li>`VK_ERROR_DEVICE_LOST` -- 생성한 physical 또는 logical device가 close되거나 없을 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">void releaseAll()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        WebVKC 객체와 해당 객체를 통해 생성한 모든 자원을 release 합니다.
+      </dd>
+
+    </dl>
+
+<pre class="example">
+  var vkc = window.webvkc;
+  vkc.initialize();
+  console.log("physicalDeviceCount : " + vkc.getPhysicalDeviceCount());
+  console.log(vkc.VK_INCOMPLETE);
+
+  var device = vkc.createDevice();
+  vkc.releaseAll();
+</pre>
+
+  <h3><a id="WEBVKCDEVICE">WebVKCDevice</a></h3>
+
+    <p>
+    </p>
+
+<pre class="idl">
+interface <dfn>WebVKCDevice</dfn> {
+  any getInfo(VKCenum name);
+  WebVKCBuffer createBuffer(VKCuint sizeInBytes);
+  WebVKCCommandQueue createCommandQueue();
+  WebVKCProgram createProgram(DOMString shaderPath, VKCuint useBufferCount);
+  void submit(WebVKCCommandQueue commandBuffer);
+  void wait();
+  void release();
+};
+</pre>
+
+    <dl class="methods">
+
+      <dt class="idl-code">any getInfo(VKCenum name)
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+      <dd>
+        <p>
+          WebVKCDevice의 PhysicalDevice에 대한 정보들을 확인할 수 있는 함수로 아래 리스트에 있는 내용을 확인할 수 있습니다. 확인된 값은 0 또는 없을수도 있습니다.
+        </p>
+
+        <table class="enumtable" id="getDeviceInfoEnums">
+          <tr><th>name</th><th>return type</th><th>expected return value</th>
+          <tr><td>VKC_apiVersion</td><td>VKCuint</td><td>32비트 중 31-22비트는 major version을 의미합니다.<br>
+                  21-12비트는 minor version을 의미합니다.<br>
+                  11-0비트는 patch version을 의미합니다.</td></tr>
+          <tr><td>VKC_driverVersion</td><td>VKCuint</td><td>제조사가 기술한 버전 정보</td></tr>
+          <tr><td>VKC_vendorID</td><td>VKCuint</td><td>제조사 식별 번호</td></tr>
+          <tr><td>VKC_deviceID</td><td>VKCuint</td><td>제조사에서 사용하는 장치 식별 번호</td></tr>
+          <tr><td>VKC_deviceType</td><td>VKCenum</td><td>typedef enum VkPhysicalDeviceType {<br>
+                  VK_PHYSICAL_DEVICE_TYPE_OTHER = 0,<br>
+                  VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU = 1,<br>
+                  VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU = 2,<br>
+                  VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU = 3,<Br>
+                  VK_PHYSICAL_DEVICE_TYPE_CPU = 4,<br>
+                  } VkPhysicalDeviceType;</td></tr>
+          <tr><td>VKC_deviceName</td><td>DOMString</td><td>장치 이름</td></tr>
+          <tr><td>VKC_maxMemoryAllocationCount</td><td>VKCuint</td><td>최대 메모리 할당이 가능한 횟수</td></tr>
+          <tr><td>VKC_maxComputeWorkGroupCount</td><td>sequence&lt;VKCuint&gt;</td><td>한 개의 command를 수행할 때 사용 가능한 최대 Local Workgroup의 수로 x, y, z 3개의 값을 확인할수 있습니다</td></tr>
+          <tr><td>VKC_maxComputeWorkGroupInvocations</td><td>VKCuint</td><td>1개의 local workgroup에서 compute shader invocation의 최대 수입니다</td></tr>
+          <tr><td>VKC_maxComputeWorkGroupSize</td><td>sequence&lt;VKCuint&gt;</td><td>각 축의 최대 local compute workgroup의 크기입니다</td></tr>
+        </table>
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VK_ERROR_INITIALIZATION_FAILED` -- 객체 초기화에 실패할 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">WebVKCBuffer createBuffer(VKCuint sizeInBytes)
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        <p>
+        sizeInBytes 크기의 메모리가 할당된 WebVKCBuffer 객체를 생성하여 반환합니다
+        </p>
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VK_NOT_READY` -- WebVKCDevice 객체가 제대로 생성되지 않았을 때 발생하는 예외</li>
+          <li>`VKC_ARGUMENT_NOT_VALID` -- 입력한 sizeInBytes의 값이 4의 배수가 아닐 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_HOST_MEMORY` -- host memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_TOO_MANY_OBJECTS` -- 같은 type의 객체가 이미 많이 생성되어 더 이상 생성할 수 없을 때 발생하는 예외</li>
+          <li>`VKC_FAILURE` -- WebVKCBuffer가 제대로 생성되지 않았을 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">WebVKCCommandQueue createCommandQueue()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        <p>
+          WebVKCommandQueue 객체를 생성하여 반환합니다
+        </p>
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VK_NOT_READY` -- WebVKCDevice 객체가 제대로 생성되지 않았을 때 발생하는 예외</li>
+          <li>`VK_ERROR_INITIALIZATION_FAILED` -- 객체 초기화에 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_HOST_MEMORY` --  host memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VKC_FAILURE` -- WebVKCCommandQueue가 제대로 생성되지 않았을 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">WebVKCProgram createProgram(DOMString shaderPath, VKCint useBufferCount)
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        <p>
+          WebVKProgram 객체를 생성하여 반환합니다. WebVKProgram은 인자로 받은 shaderPath의 compute shader파일의 내용을 이용하도록 vulkan native compute pipeline을 생성합니다. compute shader파일은 spir-v를 통해 빌드된 comp파일이어야 하며 WebVKProgram은 useBufferCount 크기의 버퍼만을 이용할 수 있습니다.
+        </p>
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VK_NOT_READY` -- WebVKCDevice 객체가 제대로 생성되지 않았을 때 발생하는 예외</li>
+          <li>`VKC_ARGUMENT_NOT_VALID` -- 입력한 shaderPath의 값이 빈 문자열일 때 발생하는 예외</li>
+          <li>`VKC_GET_SHADER_CODE_FAIL` --  주어진 경로에서 Shader Code를 받아오지 못했을 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_HOST_MEMORY` --  host memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VKC_FAILURE` -- WebVKCProgram이 제대로 생성되지 않았을 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">void submit(WebVKCCommandQueue commandBuffer)</dt>
+      <dd>
+        <p>
+          WebVKCCommandQueue에 저장한 명령어를 호출하여 수행하도록 외합니다
+        </p>
+
+        <h5 class="exceptions">Exceptions:</h5>
+          <ul class="exceptions">
+            <li>`VK_NOT_READY` -- WebVKCDevice 객체가 제대로 생성되지 않았을 때 발생하는 예외</li>
+            <li>`VK_ERROR_OUT_OF_HOST_MEMORY` -- host memory를 할당하는데 실패할 때 발생하는 예외</li>
+            <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+            <li>`VK_ERROR_DEVICE_LOST` -- 생성한 physical 또는 logical device가 close되거나 없을 때 발생하는 예외</li>
+          </ul>
+      </dd>
+
+      <dt class="idl-code">void wait(optional WebVKCCallback callback)</dt>
+      <dd>
+        <p>
+          WebVKCCommandQueue에 저장한 명령어의 수행이 완료될 때 까지 blocking 합니다
+        </p>
+
+        <h5 class="exceptions">Exceptions:</h5>
+          <ul class="exceptions">
+            <li>`VK_NOT_READY` -- WebVKCDevice 객체가 제대로 생성되지 않았을 때 발생하는 예외</li>
+            <li>`VK_ERROR_OUT_OF_HOST_MEMORY` -- host memory를 할당하는데 실패할 때 발생하는 예외</li>
+            <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+            <li>`VK_ERROR_DEVICE_LOST` -- 생성한 physical 또는 logical device가 close되거나 없을 때 발생하는 예외</li>
+          </ul>
+      </dd>
+
+      <dt class="idl-code">void release()</dt>
+      <dd>
+        <p>
+          해당 객체에 할당된 native vulkan의 자원을 release 합니다
+        </p>
+      </dd>
+    </dl>
+
+<!-- ======================================================================================================= -->
+
+    <h3><a id="WEBVKCCOMMANDQUEUE">WebVKCCommandQueue</a></h3>
+
+    <p>
+    </p>
+
+    <pre class="idl">
+interface <dfn>WebVKCCommandQueue</dfn> {
+  void begin(WebVKCProgram program);
+  void end();
+  void dispatch(VKCuint workGroupX, optional VKCuint workGroupY, optional VKCuint workGroupZ);
+  void barrier();
+  void copyBuffer(WebVKCBuffer srcBuffer, WebVKCBuffer dstBuffer, VKCuint copyBufferSize);
+  void release();
+};
+</pre>
+
+    <dl class="methods">
+      <dt class="idl-code">void begin(WebVKCProgram program)
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        WebVKCCommandQueue가 전달된 program을 이용하여 begin 명령어를 기록합니다. dispatch, barrier, copyBuffer 함수는 모두 begin이 수행된 이후에 수행 가능합니다.
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VKC_ALREADY_BEGIN_COMMAND_QUEUE` -- 해당 WebVKCCommandQueue 객체가 이미 begin 상태일 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_HOST_MEMORY` -- host memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">void end()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        WebVKCCommandQueue에 end 명령어를 기록합니다. end 이후 dispatch, barrier, copyBuffer 등의 함수는 수행할 수 없습니다.
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VKC_COMMAND_QUEUE_NOT_BEGINING` -- WebVKCCommandQueue가 begin상태가 아닐 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_HOST_MEMORY` -- host memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">void dispatch(VKCuint workGroupX, optional VKCuint workGroupY = 1, optional VKCuint workGroupZ = 1)
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        WebVKCCommandQueue가 수행될 때 전달받은 workGroupX 값의 compute WorkGroup을 사용하도록 합니다. 전달하는 workGroupX, workGroupY, workGroupZ의 값은 WebVKCDevice.getInfo(VKC_maxComputeWorkGroupCount)를 통해 얻을 수 있는 배열 중 0, 1, 2번 배열보다 작거나 같아야 합니다.
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VKC_COMMAND_QUEUE_NOT_BEGINING` -- WebVKCCommandQueue가 begin상태가 아닐 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">void barrier()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        이전에 수행중인 WebVKCCommandQueue의 명령어가 종료 될 때 까지 기다리게 합니다. 수행되는 dispatch/copyBuffer 등의 명령어가 의존성을 가지고 있을 때 꼭 사용하여야 합니다.
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VKC_COMMAND_QUEUE_NOT_BEGINING` -- WebVKCCommandQueue가 begin상태가 아닐 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">void copyBuffer(WebVKCBuffer srcBuffer, WebVKCBuffer dstBuffer, VKCuint copyBufferSize)
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        srcBuffer의 데이터를 dstBuffer에 copyBufferSize의 크기만큼 복사하는 명령입니다. copyBufferSize는 항상 0보다 크고 srcBuffer와 dstBuffer의 size보다는 작아야 합니다. 해당 명령은 WebVKCCommandQueue가 begin상태일 때에만 수행할 수 있습니다.
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VKC_COMMAND_QUEUE_NOT_BEGINING` -- WebVKCCommandQueue가 begin상태가 아닐 때 발생하는 예외</li>
+          <li>`VKC_ARGUMENT_NOT_VALID` -- copyBufferSize가 0보다 작거나 srcBuffer/dstBuffer의 size보다 클 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">void release()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        해당 객체에 할당된 native vulkan의 자원을 release 합니다
+      </dd>
+
+    </dl>
+
+<pre class="example">
+function doWork(commandQueue, program, srcBuffer, dstBuffer) {
+  commandQueue.begin(program);
+  commandQueue.dispatch(10);
+  commandQueue.barrier();
+  commandQueue.copyBuffer(srcBuffer, dstBuffer, 1024);
+  commandQUeue.end();
+};
+</pre>
+
+
+<!-- ======================================================================================================= -->
+
+    <h3><a id="WEBVKCBUFFER">WebVKCBuffer</a></h3>
+
+<pre class="idl">interface <dfn>WebVKCBuffer</dfn> {
+  VKCResult readBuffer(VKCuint index, VKCuint bufferByteSize, ArrayBufferView data);
+  VKCResult writeBuffer(VKCuint index, VKCuint bufferByteSize, ArrayBufferView data);
+  VKCResult fillBuffer(VKCuint index, ArrayBufferView data);
+  VKCuint getAllocateBufferSize();
+  void release();
+};
+</pre>
+
+    <dl class="methods">
+      <dt class="idl-code">VKCResult readBuffer(unsigned index, unsigned bufferByteSize, ArrayBufferView data)
+      </dt>
+      <dd>
+        index 위치에 bind된 메모리의 데이터를 bufferByteSize만큼 data에 복사합니다
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VK_ERROR_OUT_OF_HOST_MEMORY` -- host memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_MEMORY_MAP_FAILED` -- memory를 mapping하는 데 실패할 때 발생하는 예외</li>
+          <li>`VKC_ARGUMENT_NOT_VALID` -- index가 버퍼 사이즈보다 크거나 index + bufferByteSize의 값이 버퍼 사이즈보다 클 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">VKCResult writeBuffer(unsigned index, unsigned bufferByteSize, ArrayBufferView data)
+      </dt>
+      <dd>
+        index 위치에 bind된 메모리에 입력받은 데이터를 bufferByteSize만큼 입력합니다
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VK_ERROR_OUT_OF_HOST_MEMORY` -- host memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_MEMORY_MAP_FAILED` -- memory를 mapping하는 데 실패할 때 발생하는 예외</li>
+          <li>`VKC_ARGUMENT_NOT_VALID` -- index가 버퍼 사이즈보다 크거나 index + bufferByteSize의 값이 버퍼 사이즈보다 클 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">VKCResult fillBuffer(VKCuint index, VKCuint data)
+      </dt>
+      <dd>
+        index 위치에 bind된 메모리를 입력받은 data로 채웁니다. 이 때 index는 byte index로 4의 배수이어야 합니다. data는 4byte 크기의 데이터이어야 하며 index 위치부터 buffer의 끝까지 data의 내용을 반복해서 입력합니다.
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VK_NOT_READY` -- Buffer가 release된 상태일 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_HOST_MEMORY` -- host memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_MEMORY_MAP_FAILED` -- memory를 mapping하는 데 실패할 때 발생하는 예외</li>
+          <li>`VKC_ARGUMENT_NOT_VALID` -- index가 4의 배수가 아니거나 버퍼 사이즈보다 클 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">VKCuint getAllocateBufferSize()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        해당 객체에 할당된 메모리 크기를 반환합니다
+      </dd>
+
+      <dt class="idl-code">void release()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        해당 객체에 할당된 native vulkan의 자원을 release 합니다
+      </dd>
+
+    </dl>
+
+<!-- ======================================================================================================= -->
+
+    <h3><a id="WEBVKCPROGRAM">WebVKCProgram</a></h3>
+
+    <p>
+    </p>
+    <pre class="idl">
+interface <dfn>WebVKCProgram</dfn> {
+  void setArg(VKCuint id, WebVKCBuffer buffer);
+  void updateDescriptor();
+  void release();
+};
+</pre>
+
+    <dl class="methods">
+      <dt class="idl-code">void setArg(VKCuint id, WebVKCBuffer buffer)
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        생성된 WebVKCProgram에 WebVKCBuffer를 연결할 때 이용하며 입력받은 id에 buffer를 binding합니다. 이 때 id는 WebVKCProgram 생성 시 입력한 useBufferCount의 값보다 커서는 안되며 이미 binding한 id에 다시 binding을 시도할 경우 기존의 binding 정보는 사라집니다.
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VKC_ARGUMENT_NOT_VALID` -- id가 WebVKCProgram 생성 시 입력한 useBufferCount의 값보다 클 때 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">void updateDescriptor()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        setArg를 통해 설정된 WebVKCBuffer를 WebVKCProgram에 적용합니다. 비어있는 argument id가 존재하는 경우 update를 수행하지 않습니다.
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VKC_ERROR_NOT_SETARG_BUFFER_INDEX` -- 비어있는 WebVKCBuffer Argument가 존재하는 경우 발생하는 예외</li>
+        </ul>
+      </dd>
+
+      <dt class="idl-code">void release()
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        해당 객체에 할당된 native vulkan의 자원을 release 합니다
+      </dd>
+    </dl>
+
+<pre class="example">
+program.setArg(0, buffer1);
+program.setArg(1, buffer2);
+</pre>
+
+
+</body>
+</html>
