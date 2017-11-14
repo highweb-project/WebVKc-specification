@@ -311,6 +311,7 @@ interface <dfn>WebVKCDevice</dfn> {
   WebVKCBuffer createBuffer(VKCuint sizeInBytes);
   WebVKCCommandQueue createCommandQueue();
   WebVKCProgram createProgram(DOMString shaderPath, VKCuint useBufferCount);
+  WebVKCProgram createProgramWithShaderCode(DOMString shaderCode, VKCuint useBufferCount);
   void submit(WebVKCCommandQueue commandBuffer);
   void wait();
   void release();
@@ -398,7 +399,7 @@ interface <dfn>WebVKCDevice</dfn> {
       </dt>
       <dd>
         <p>
-          WebVKProgram 객체를 생성하여 반환합니다. WebVKProgram은 인자로 받은 shaderPath의 compute shader파일의 내용을 이용하도록 vulkan native compute pipeline을 생성합니다. compute shader파일은 spir-v를 통해 빌드된 comp파일이어야 하며 WebVKProgram은 useBufferCount 크기의 버퍼만을 이용할 수 있습니다.
+          WebVKProgram 객체를 생성하여 반환합니다. WebVKProgram은 인자로 받은 shaderPath의 compute shader파일의 내용을 이용하도록 vulkan native compute pipeline을 생성합니다. compute shader파일은 spir-v를 통해 빌드된 comp파일이어야 하며 생성된 WebVKProgram은 useBufferCount 크기의 버퍼만을 이용할 수 있습니다.
         </p>
 
         <h5 class="exceptions">Exceptions:</h5>
@@ -406,6 +407,25 @@ interface <dfn>WebVKCDevice</dfn> {
           <li>`VK_NOT_READY` -- WebVKCDevice 객체가 제대로 생성되지 않았을 때 발생하는 예외</li>
           <li>`VKC_ARGUMENT_NOT_VALID` -- 입력한 shaderPath의 값이 빈 문자열일 때 발생하는 예외</li>
           <li>`VKC_GET_SHADER_CODE_FAIL` --  주어진 경로에서 Shader Code를 받아오지 못했을 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_HOST_MEMORY` --  host memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
+          <li>`VKC_FAILURE` -- WebVKCProgram이 제대로 생성되지 않았을 때 발생하는 예외</li>
+        </ul>
+      </dd>
+      
+      <dt class="idl-code">WebVKCProgram createProgramWithShaderCode(DOMString shaderCode, VKCuint useBufferCount)
+        <span class="cl-spec"></span>
+      </dt>
+      <dd>
+        <p>
+          WebVKProgram 객체를 생성하여 반환합니다. WebVKProgram은 인자로 받은 shaderCode를 컴파일하여 vulkan native compute pipeline을 생성합니다. shaderCode는 Vulkan에서 이용 가능한 compute shader source code이어야 하며 spir-v를 이용한 compile이 가능해야 합니다. 생성된 WebVKProgram은 useBufferCount 크기의 버퍼만을 이용할 수 있습니다.
+        </p>
+
+        <h5 class="exceptions">Exceptions:</h5>
+        <ul class="exceptions">
+          <li>`VK_NOT_READY` -- WebVKCDevice 객체가 제대로 생성되지 않았을 때 발생하는 예외</li>
+          <li>`VKC_ARGUMENT_NOT_VALID` -- 입력한 shaderCode의 값이 빈 문자열일 때 발생하는 예외</li>
+          <li>`VKC_GET_SHADER_CODE_FAIL` --  주어진 shaderCode를 compile 도중 에러가 발생했을 때 발생하는 예외</li>
           <li>`VK_ERROR_OUT_OF_HOST_MEMORY` --  host memory를 할당하는데 실패할 때 발생하는 예외</li>
           <li>`VK_ERROR_OUT_OF_DEVICE_MEMORY` -- device memory를 할당하는데 실패할 때 발생하는 예외</li>
           <li>`VKC_FAILURE` -- WebVKCProgram이 제대로 생성되지 않았을 때 발생하는 예외</li>
